@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>千问自动录音 · 控制面板</title>
+<style>
+  :root{
+    --navy:#0F4C81; --navy2:#24567F; --line:#D6E2F0; --thead:#DCE9F5;
+    --ink:#333333; --muted:#6B7A8C; --cream:#FBF7EC; --creamline:#E6DCC2;
+    --ok:#16A34A; --rec:#DC2626; --warn:#B45309; --bg:#F5F7FA;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:KaiTi,"楷体",Arial,"Microsoft YaHei",sans-serif;
+    font-size:14px; line-height:1.65;
+  }
+  .en,.num{font-family:Arial,Helvetica,sans-serif}
+  header{
+    background:var(--navy); color:#fff; padding:18px 26px;
+    position:sticky; top:0; z-index:50; box-shadow:0 2px 8px rgba(15,76,129,.25);
+  }
+  header h1{margin:0; font-size:19px; font-weight:700; letter-spacing:.5px}
+  header .sub{font-size:12px; opacity:.85; margin-top:3px}
+  main{max-width:1180px; margin:0 auto; padding:20px 22px 70px}
+  section{
+    background:#fff; border:1px solid var(--line); border-radius:8px;
+    padding:16px 20px 18px; margin:0 0 16px;
+  }
+  h2{
+    font-size:15px; color:var(--navy); margin:0 0 12px;
+    padding-left:9px; border-left:4px solid var(--navy); line-height:1.2;
+  }
+  .concl{
+    background:var(--cream); border:1px solid var(--creamline);
+    border-left:4px solid var(--navy2); border-radius:5px;
+    padding:11px 14px; margin:0 0 14px; font-size:13.5px;
+  }
+  .concl b{color:var(--navy)}
+
+  /* 状态卡 */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px}
+  .card{
+    border:1px solid var(--line); border-radius:7px; padding:12px 14px;
+    background:linear-gradient(180deg,#fff,#F8FAFD);
+  }
+  .card .k{font-size:12px; color:var(--muted); margin-bottom:5px}
+  .card .v{font-size:19px; font-weight:700; font-family:Arial,sans-serif; color:var(--navy)}
+  .card .v.small{font-size:15px}
+  .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:7px; vertical-align:1px}
+  .dot.on{background:var(--ok)} .dot.rec{background:var(--rec)}
+  .dot.pause{background:#94A3B8} .dot.off{background:#9AA5B1}
+
+  /* 表格 */
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th{
+    background:var(--thead); color:var(--navy2); text-align:left;
+    padding:7px 9px; border:1px solid var(--line); font-weight:700; white-space:nowrap;
+  }
+  td{padding:6px 9px; border:1px solid var(--line); vertical-align:middle}
+  tbody tr:nth-child(even){background:#FBFCFE}
+  .pill{
+    display:inline-block; padding:1px 8px; border-radius:10px;
+    font-size:11.5px; font-family:Arial,sans-serif; border:1px solid;
+  }
+  .pill.yes{color:var(--ok); border-color:#A7E0BC; background:#F0FBF4}
+  .pill.no{color:var(--muted); border-color:#D5DDE6; background:#F7F9FB}
+  .pill.act{color:var(--rec); border-color:#F3B9B9; background:#FEF2F2}
+
+  /* 控件 */
+  button{
+    font-family:inherit; font-size:13px; padding:6px 14px; border-radius:6px;
+    border:1px solid var(--navy); background:var(--navy); color:#fff; cursor:pointer;
+  }
+  button:hover{background:var(--navy2)}
+  button.ghost{background:#fff; color:var(--navy)}
+  button.ghost:hover{background:#EAF1F8}
+  button.danger{border-color:var(--rec); background:var(--rec)}
+  button.danger:hover{background:#B91C1C}
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px}
+  label.f{display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px}
+  input[type=text],input[type=number],select{
+    width:100%; padding:6px 9px; border:1px solid var(--line); border-radius:5px;
+    font-family:Arial,sans-serif; font-size:13px; color:var(--ink); background:#fff;
+  }
+  .sw{display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff}
+  .sw input{width:16px; height:16px}
+  .sw .lbl{font-size:13px}
+  .sw .proc{font-size:11px; color:var(--muted); font-family:Arial,sans-serif}
+
+  /* 日志 */
+  pre.log{
+    background:#0F2033; color:#D6E4F0; padding:12px 14px; border-radius:6px;
+    font-family:Consolas,"Courier New",monospace; font-size:12px; line-height:1.55;
+    max-height:320px; overflow:auto; margin:0; white-space:pre-wrap; word-break:break-all;
+  }
+  .hint{font-size:12px; color:var(--muted); margin-top:8px}
+  .toast{
+    position:fixed; right:18px; bottom:70px; background:var(--navy); color:#fff;
+    padding:9px 16px; border-radius:6px; font-size:13px; opacity:0;
+    transition:opacity .25s; pointer-events:none; z-index:999;
+  }
+  .toast.show{opacity:1}
+  .path{font-family:Consolas,monospace; font-size:12px; color:var(--navy2); word-break:break-all}
+  @media (max-width:640px){
+    main{padding:14px 12px 70px}
+    section{padding:13px 13px 15px}
+    header{padding:14px 15px}
+    header h1{font-size:16px}
+    .card .v{font-size:17px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>千问自动录音 · 控制面板</h1>
+  <div class="sub">Meeting Auto-Recorder · 检测 Teams / Zoom / 微信 通话并唤起千问录音纪要</div>
+</header>
+
+<main>
+
+  <section>
+    <div class="concl">
+      <b>它怎么工作：</b>用 Windows 音频会话判断"是否在通话"（通话时该应用必然占用麦克风），
+      一旦确认就发送千问自己的录音快捷键 <b>右 Ctrl + /</b>。
+      本面板只监听本机 <span class="num" id="bindAddr">127.0.0.1</span>，数据不出机器。
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="k">监听状态 Status</div>
+        <div class="v small" id="stState"><span class="dot off"></span>读取中…</div>
+      </div>
+      <div class="card">
+        <div class="k">当前通话 Active call</div>
+        <div class="v small" id="stCall">—</div>
+      </div>
+      <div class="card">
+        <div class="k">千问录音 Recorder</div>
+        <div class="v small" id="stRec">—</div>
+      </div>
+      <div class="card">
+        <div class="k">累计触发 Triggered</div>
+        <div class="v" id="stCount">0</div>
+      </div>
+      <div class="card">
+        <div class="k">已运行 Uptime</div>
+        <div class="v small" id="stUp">—</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="btnPause" class="ghost">暂停监听</button>
+      <button id="btnTrigger">立即录音一次</button>
+    </div>
+    <div class="hint">
+      注意：快捷键只负责"唤起"，不是开关；通话结束后需在千问窗口手动点"结束"。
+      本工具不会自动停止录音。
+    </div>
+  </section>
+
+  <section>
+    <h2>一、目标应用监测 Target applications</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:16%">应用 Application</th>
+          <th style="width:12%">已启用</th>
+          <th style="width:12%">进程 Process</th>
+          <th style="width:14%">麦克风占用 Mic</th>
+          <th>识别的进程名 Process names</th>
+        </tr>
+      </thead>
+      <tbody id="tbApps">
+        <tr><td colspan="5" style="color:#6B7A8C">读取中…</td></tr>
+      </tbody>
+    </table>
+    <div class="hint">
+      "麦克风占用 = Active" 才代表真的在通话。应用只是开着并不会触发。
+    </div>
+  </section>
+
+  <section>
+    <h2>二、配置 Configuration</h2>
+    <div class="grid2" id="cfgApps"></div>
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <label class="f">录音快捷键 Hotkey</label>
+        <input type="text" id="cfgHotkey">
+      </div>
+      <div>
+        <label class="f">轮询间隔 Poll interval（秒）</label>
+        <input type="number" id="cfgPoll" step="0.5" min="0.5">
+      </div>
+      <div>
+        <label class="f">起始防抖 Debounce（秒）</label>
+        <input type="number" id="cfgDebounce" step="0.5" min="0">
+      </div>
+      <div>
+        <label class="f">重复触发冷却 Cooldown（秒）</label>
+        <input type="number" id="cfgCooldown" step="1" min="0">
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="btnSave">保存并生效</button>
+      <button id="btnReload" class="ghost">放弃修改</button>
+      <span id="cfgMsg" class="hint" style="margin:0"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>三、历史录音 Recordings</h2>
+    <div class="concl">
+      本地只保存<b>音频</b>；转写与 AI 纪要在千问云端，需在千问 App 内查看或导出。
+      目录：<span class="path" id="recDir">—</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:22%">开始时间 Started</th>
+          <th style="width:14%">大小 Size</th>
+          <th>文件夹 Folder</th>
+        </tr>
+      </thead>
+      <tbody id="tbRec">
+        <tr><td colspan="3" style="color:#6B7A8C">读取中…</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>四、运行日志 Event log</h2>
+    <pre class="log" id="logBox">读取中…</pre>
+    <div class="hint">每 5 秒自动刷新。完整日志见 auto_record.log。</div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+var API = "";   // 同源
+var lastCfg = null;
+
+function $(id){ return document.getElementById(id); }
+
+function esc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+/* 只在内容真的变了才写 DOM —— 避免高频刷新冲掉批注/编辑层的改动 */
+function setHTML(el, html){
+  if (el && el.innerHTML !== html) el.innerHTML = html;
+}
+
+function fmtBytes(n){
+  n = Number(n) || 0;
+  if (n >= 1073741824) return (n/1073741824).toFixed(1) + " GB";
+  if (n >= 1048576)    return (n/1048576).toFixed(1) + " MB";
+  if (n >= 1024)       return (n/1024).toFixed(1) + " KB";
+  return n + " B";
+}
+
+function fmtUp(sec){
+  sec = Math.max(0, Math.round(Number(sec) || 0));
+  var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if (h) return h + " 小时 " + m + " 分";
+  if (m) return m + " 分 " + s + " 秒";
+  return s + " 秒";
+}
+
+function toast(msg){
+  var t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 1800);
+}
+
+function jget(url){
+  return fetch(API + url, {cache:"no-store"}).then(function(r){ return r.json(); });
+}
+function jpost(url, body){
+  return fetch(API + url, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body || {})
+  }).then(function(r){ return r.json(); });
+}
+
+/* ---------------- 状态 ---------------- */
+function renderStatus(s){
+  var dot, txt;
+  if (!s.running)      { dot = "off";   txt = "未运行"; }
+  else if (s.paused)   { dot = "pause"; txt = "已暂停"; }
+  else if (s.recording) { dot = "rec";  txt = "录音中"; }
+  else                 { dot = "on";    txt = "监听中"; }
+  setHTML($("stState"), '<span class="dot ' + dot + '"></span>' + txt);
+
+  setHTML($("stCall"), s.active_calls && s.active_calls.length
+    ? esc(s.active_calls.join(" / ")) : "无");
+  setHTML($("stRec"), s.recording
+    ? '<span class="dot rec"></span>正在录音'
+    : '<span class="dot off"></span>未录音');
+  setHTML($("stCount"), esc(s.trigger_count));
+  setHTML($("stUp"), s.running ? esc(fmtUp(s.uptime_sec)) : "—");
+  $("btnPause").textContent = s.paused ? "恢复监听" : "暂停监听";
+
+  var rows = (s.apps || []).map(function(a){
+    var mic = a.mic || "—";
+    var micPill = a.mic === "Active"
+      ? '<span class="pill act">Active</span>'
+      : '<span class="pill no">' + esc(mic) + '</span>';
+    var enPill = a.enabled
+      ? '<span class="pill yes">是</span>'
+      : '<span class="pill no">否</span>';
+    var runPill = a.running && a.running.length
+      ? '<span class="pill yes">运行中</span>'
+      : '<span class="pill no">未运行</span>';
+    return '<tr>'
+      + '<td>' + esc(a.label) + '</td>'
+      + '<td>' + enPill + '</td>'
+      + '<td>' + runPill + '</td>'
+      + '<td>' + micPill + '</td>'
+      + '<td class="en" style="font-size:11.5px;color:#6B7A8C">' + esc((a.processes||[]).join(", ")) + '</td>'
+      + '</tr>';
+  }).join("");
+  setHTML($("tbApps"), rows || '<tr><td colspan="5">无</td></tr>');
+}
+
+/* ---------------- 录音列表 ---------------- */
+function renderRec(d){
+  setHTML($("recDir"), esc(d.dir || "—"));
+  var items = d.items || [];
+  if (!items.length){
+    setHTML($("tbRec"), '<tr><td colspan="3" style="color:#6B7A8C">还没有录音</td></tr>');
+    return;
+  }
+  setHTML($("tbRec"), items.map(function(r){
+    var t = r.folder;
+    var m = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(r.folder);
+    if (m) t = m[1] + "-" + m[2] + "-" + m[3] + " " + m[4] + ":" + m[5];
+    return '<tr>'
+      + '<td class="en">' + esc(t) + '</td>'
+      + '<td class="en">' + esc(fmtBytes(r.bytes)) + '</td>'
+      + '<td class="en" style="font-size:11.5px;color:#6B7A8C">' + esc(r.folder) + '</td>'
+      + '</tr>';
+  }).join(""));
+}
+
+/* ---------------- 日志 ---------------- */
+function renderLog(d){
+  var lines = (d.lines || []);
+  setHTML($("logBox"), esc(lines.slice(-60).join("\n")) || "（暂无日志）");
+  var box = $("logBox");
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ---------------- 配置 ---------------- */
+function renderCfg(c){
+  lastCfg = c;
+  $("cfgHotkey").value   = (c.trigger && c.trigger.hotkey) || "";
+  $("cfgPoll").value     = c.poll_interval_sec;
+  $("cfgDebounce").value = c.start_debounce_sec;
+  $("cfgCooldown").value = c.retrigger_cooldown_sec;
+
+  var keys = Object.keys(c.apps || {});
+  setHTML($("cfgApps"), keys.map(function(k){
+    var a = c.apps[k];
+    return '<div class="sw">'
+      + '<input type="checkbox" data-app="' + esc(k) + '"' + (a.enabled ? " checked" : "") + '>'
+      + '<span class="lbl">' + esc(a.label || k) + '<br>'
+      + '<span class="proc">' + esc((a.processes||[]).join(", ")) + '</span></span>'
+      + '</div>';
+  }).join(""));
+}
+
+function collectCfg(){
+  var apps = {};
+  document.querySelectorAll('#cfgApps input[data-app]').forEach(function(el){
+    apps[el.getAttribute("data-app")] = { enabled: el.checked };
+  });
+  return {
+    apps: apps,
+    trigger: { method:"hotkey", hotkey: $("cfgHotkey").value.trim() },
+    poll_interval_sec: parseFloat($("cfgPoll").value) || 2,
+    start_debounce_sec: parseFloat($("cfgDebounce").value) || 0,
+    retrigger_cooldown_sec: parseFloat($("cfgCooldown").value) || 0
+  };
+}
+
+/* ---------------- 轮询 ---------------- */
+var failCount = 0;
+
+function showOffline(){
+  setHTML($("stState"),
+    '<span class="dot off"></span>未连接到后台');
+  setHTML($("stCall"), "—");
+  setHTML($("stRec"), "—");
+  setHTML($("tbApps"),
+    '<tr><td colspan="5" style="color:#B45309">'
+    + '读不到后台数据。请先启动托盘程序，再从 '
+    + '<b>http://127.0.0.1:8765/</b> 打开本页面'
+    + '（直接双击 HTML 文件是不行的，页面需要本地服务）。</td></tr>');
+  setHTML($("logBox"), "（未连接到后台）");
+}
+
+function tickStatus(){
+  jget("/api/status").then(function(s){
+    failCount = 0;
+    renderStatus(s);
+  }).catch(function(){
+    failCount++;
+    if (failCount >= 2) showOffline();
+  });
+}
+function tickRec(){
+  if (failCount >= 2) return;
+  jget("/api/recordings").then(renderRec).catch(function(){});
+}
+function tickLog(){
+  if (failCount >= 2) return;
+  jget("/api/log").then(renderLog).catch(function(){});
+}
+
+/* ---------------- 事件绑定 ---------------- */
+document.addEventListener("DOMContentLoaded", function(){
+  $("btnPause").addEventListener("click", function(){
+    var wantPause = $("btnPause").textContent.indexOf("暂停") >= 0;
+    jpost("/api/pause", {paused: wantPause}).then(function(){
+      toast(wantPause ? "已暂停监听" : "已恢复监听");
+      tickStatus();
+    });
+  });
+
+  $("btnTrigger").addEventListener("click", function(){
+    jpost("/api/trigger", {}).then(function(){
+      toast("已发送录音快捷键");
+      setTimeout(tickStatus, 800);
+    });
+  });
+
+  $("btnReload").addEventListener("click", function(){
+    jget("/api/config").then(function(c){ renderCfg(c); toast("已放弃修改"); });
+  });
+
+  $("btnSave").addEventListener("click", function(){
+    jpost("/api/config", collectCfg()).then(function(r){
+      if (r.ok){ renderCfg(r.config); toast("已保存并生效"); }
+      else { toast("保存失败：" + (r.error || "未知错误")); }
+    }).catch(function(e){ toast("保存失败：" + e); });
+  });
+
+  jget("/api/config").then(renderCfg).catch(function(){});
+
+  tickStatus(); tickRec(); tickLog();
+  setInterval(tickStatus, 2000);
+  setInterval(tickRec, 30000);
+  setInterval(tickLog, 5000);
+});
+</script>
+</body>
+</html>

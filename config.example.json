@@ -1,0 +1,77 @@
+{
+  "apps": {
+    "teams": {
+      "enabled": true,
+      "label": "Teams",
+      "processes": [
+        "ms-teams.exe",
+        "teams.exe"
+      ]
+    },
+    "zoom": {
+      "enabled": true,
+      "label": "Zoom",
+      "processes": [
+        "zoom.exe",
+        "cptservice.exe"
+      ]
+    },
+    "wechat": {
+      "enabled": true,
+      "label": "微信",
+      "processes": [
+        "weixin.exe",
+        "wechatappex.exe",
+        "wechat.exe"
+      ]
+    },
+    "tencent_meeting": {
+      "enabled": true,
+      "label": "腾讯会议",
+      "processes": [
+        "wemeetapp.exe"
+      ]
+    },
+    "feishu": {
+      "enabled": true,
+      "label": "飞书",
+      "processes": [
+        "feishu.exe",
+        "lark.exe"
+      ]
+    },
+    "dingtalk": {
+      "enabled": true,
+      "label": "钉钉",
+      "processes": [
+        "tblive.exe",
+        "dingtalk.exe"
+      ]
+    }
+  },
+  "trigger": {
+    "method": "hotkey",
+    "hotkey": "rightctrl+/"
+  },
+  "recorder_process": "qianwen.exe",
+  "poll_interval_sec": 2,
+  "start_debounce_sec": 3,
+  "retrigger_cooldown_sec": 30,
+  "panel": {
+    "host": "127.0.0.1",
+    "port": 8765
+  },
+  "archive": {
+    "enabled": true,
+    "dir": "",
+    "min_age_sec": 60,
+    "interval_sec": 120
+  },
+  "launcher": {
+    "auto_launch": true,
+    "exe": "",
+    "wait_ready_sec": 12,
+    "retry_hotkey": 2,
+    "retry_delay_sec": 7
+  }
+}
