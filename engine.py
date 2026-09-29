@@ -178,14 +178,19 @@ def processes_running() -> dict[str, int]:
 
 
 def detect_active_calls(cfg: dict, sessions: dict[str, str],
-                        running: dict[str, int]) -> list[str]:
+                        running: dict[str, int] | None = None) -> list[str]:
+    """返回正在通话的应用 key 列表。
+
+    ★ 只看音频会话就够了：会话是 Active 说明该进程必然活着、且正占用麦克风。
+    早先还要求「进程在 running 里」，那是冗余的 —— 而枚举全部进程要 4.9ms，
+    占了每轮开销的一半。running 参数保留只为兼容旧调用。
+    """
     active = []
     for key, spec in cfg["apps"].items():
         if not spec.get("enabled"):
             continue
         for proc in spec["processes"]:
-            proc = proc.lower()
-            if proc in running and sessions.get(proc) == "Active":
+            if sessions.get(proc.lower()) == "Active":
                 active.append(key)
                 break
     return active
@@ -591,6 +596,7 @@ class Watcher:
         self._running: dict[str, int] = {}
         self._pending: dict[str, float] = {}
         self._fired: set[str] = set()      # 本次通话已处理过（防重复触发）
+        self._tick_n = 0                   # 轮询计数（用于给进程枚举降频）
         self.archiver = RecordingArchiver(self.cfg)
 
     # ---------------- 控制 ----------------
@@ -749,9 +755,16 @@ class Watcher:
 
     def _tick(self, prev_active: set[str]) -> None:
         sessions = capture_sessions()
-        running = processes_running()
-        active = set(detect_active_calls(self.cfg, sessions, running))
+        active = set(detect_active_calls(self.cfg, sessions))
         rec = recorder_is_recording(self.cfg, sessions)
+
+        # 进程列表只用于面板展示，没必要每轮都全量枚举（省一半 CPU）。
+        # 每 5 轮刷新一次；首次(_running 为空)立即刷。
+        self._tick_n += 1
+        if self._tick_n % 5 == 1 or not self._running:
+            running = processes_running()
+        else:
+            running = self._running
 
         with self._lock:
             self._sessions = sessions

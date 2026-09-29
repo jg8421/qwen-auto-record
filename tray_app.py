@@ -355,24 +355,38 @@ def main() -> int:
     icon = Icon("qwen_auto_record", make_icon("listening"),
                 "千问自动录音", menu)
 
+    # ★ 缓存上一轮的图标状态与标题：make_icon() 每次都要 Pillow 重画，
+    # 外加一次 Win32 托盘更新。on_change 每轮轮询都会被调，不缓存的话
+    # 光"重画图标"就比检测本身还贵。
+    _last = {"icon": None, "title": None}
+
     def on_change(s: dict):
-        """监听器状态变化时刷新托盘图标。"""
+        """监听器状态变化时刷新托盘（仅在真的变了时才动）。"""
         try:
             if not s["running"]:
-                st = "down"
+                st, label = "down", "未运行"
             elif s["paused"]:
-                st = "paused"
+                st, label = "paused", "已暂停"
             elif s["recording"]:
-                st = "recording"
+                st, label = "recording", "录音中"
+            elif s["active_calls"]:
+                st, label = "listening", "通话中（" + ", ".join(s["active_calls"]) + "）"
             else:
-                st = "listening"
-            icon.icon = make_icon(st)
-            seg = [status_text()]
-            if s["hotkey"]:
+                st, label = "listening", "监听中"
+
+            if st != _last["icon"]:
+                icon.icon = make_icon(st)
+                _last["icon"] = st
+
+            seg = [f"● {label}"]
+            if s.get("hotkey"):
                 seg.append(f"触发键 {s['hotkey']}")
-            if s["trigger_count"]:
+            if s.get("trigger_count"):
                 seg.append(f"已触发 {s['trigger_count']} 次")
-            icon.title = "千问自动录音 · " + " · ".join(seg)
+            title = "千问自动录音 · " + " · ".join(seg)
+            if title != _last["title"]:
+                icon.title = title
+                _last["title"] = title
         except Exception:
             pass
 
