@@ -39,6 +39,29 @@ Windows 小工具：**检测到你在开会（Teams / Zoom / 微信 / 腾讯会�
 - **先拉起再按键**：千问没启动时，光发快捷键是对着空气按。所以会先启动它，
   等 12 秒让录音插件把键盘钩子挂上，再发键。
 
+### ★ 怎么区分「真通话」和「只是用了麦克风」
+
+这一条是踩过坑才加上的：**语音输入法（如微信输入法）也用麦克风**。
+如果只按「谁占着麦克风」判定，你用输入法语音打字时就会被误判成"微信通话"，
+录音自己就开了。
+
+所以判定要求**双向音频**：
+
+| 场景 | 麦克风 | 扬声器 | 判定 |
+|---|---|---|---|
+| 微信语音/视频通话 | 占用 | 持续出声 | ✅ 通话 |
+| 微信输入法语音输入 | 占用 | 无声 | ❌ 不是 |
+| 按住录一条语音消息 | 占用 | 无声 | ❌ 不是 |
+| 在微信里看视频/听语音 | 不占 | 出声 | ❌ 不是 |
+| Teams / Zoom 通话 | 占用 | 持续出声 | ✅ 通话 |
+
+两个细节：
+
+- **要求扬声器"持续"出声 ≥ 3 秒**（`min_playback_sec`）。真通话的播放流一直开着
+  （WASAPI 会话即使当下静音也保持 Active），而通知音/提示音只响一两秒——
+  用"持续时长"把两者分开。否则微信随便响一声"叮"，就又能骗过判定。
+- **输入法进程直接拉黑**（`exclude_processes`），它们永远不算通话。
+
 ---
 
 ## 环境要求
@@ -111,6 +134,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "安装与开机自启.ps1"
   "start_debounce_sec": 3.0,      // 通话需持续多久才触发（防抖）
   "retrigger_cooldown_sec": 30.0, // 两次触发的最小间隔
 
+  // ★ 防误触发：要求双向音频（既占麦克风、又持续出声）
+  "require_playback": true,       // 关掉就退回"只看麦克风"的旧行为
+  "min_playback_sec": 3,          // 扬声器需连续出声满几秒才算通话
+  "exclude_processes": [          // 这些进程永远不算通话（输入法等）
+    "wetype_update.exe", "wetype_server.exe", "wetype_renderer.exe",
+    "wetype_service.exe", "sogouinput.exe", "qqpinyin.exe",
+    "ctfmon.exe", "chsime.exe", "textinputhost.exe"
+  ],
+
   // 千问没启动时先拉起它
   "launcher": {
     "auto_launch": true,
@@ -124,6 +156,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "安装与开机自启.ps1"
   "archive": { "enabled": true, "dir": "", "min_age_sec": 60, "interval_sec": 120 }
 }
 ```
+
+> **被误触发了怎么办**：先看是不是某个应用"只占麦克风不出声"。
+> 跑 `tools/watch_all_sessions.py` 能实时看到每个进程的麦克风/扬声器状态，
+> 一眼就能看出是谁在捣乱；是输入法就往 `exclude_processes` 里加。
 
 ---
 

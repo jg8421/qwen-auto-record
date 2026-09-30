@@ -61,6 +61,18 @@ DEFAULT_CONFIG = {
     "start_debounce_sec": 3.0,
     "retrigger_cooldown_sec": 30.0,
     "panel": {"host": "127.0.0.1", "port": 8765},
+    # ★ 防误触发：真通话是双向的（既采集麦克风、又回放对方声音），
+    # 而语音输入法 / 录语音消息只有麦克风。所以要求近期也有回放活动。
+    "require_playback": True,
+    # 回放需「连续活跃」满这么多秒才算通话（挡掉通知音/提示音）
+    "min_playback_sec": 3,
+    # 输入法类进程永远不算"通话"（它们也用麦克风做语音输入）
+    "exclude_processes": [
+        "wetype_update.exe", "wetype_server.exe", "wetype_renderer.exe",
+        "wetype_service.exe", "wechatinput.exe", "weixininput.exe",
+        "sogouinput.exe", "qqpinyin.exe", "baiduime.exe", "ctfmon.exe",
+        "chsime.exe", "textinputhost.exe", "inputmethod.exe",
+    ],
     # 录音自动备份：把已结束的录音从千问目录复制到本目录下的 录音\
     "archive": {"enabled": True, "dir": "", "min_age_sec": 60, "interval_sec": 120},
     # 千问没在跑时，先把它拉起来再发快捷键（否则单独发键毫无作用）。
@@ -72,6 +84,14 @@ DEFAULT_CONFIG = {
 # 录音快捷键的真实来源（逆向确认）：
 #   %LOCALAPPDATA%\qianwen\User Data\Default\Preferences
 #   -> browser.quark.audio_record.keybinding.settings = " rightctrl + /"
+# 输入法：它们会占用麦克风做语音输入，但绝不是"通话"
+DEFAULT_EXCLUDE_PROCESSES = [
+    "wetype_update.exe", "wetype_server.exe", "wetype_renderer.exe",
+    "wetype_service.exe", "wechatinput.exe", "weixininput.exe",
+    "sogouinput.exe", "qqpinyin.exe", "baiduime.exe", "ctfmon.exe",
+    "chsime.exe", "textinputhost.exe", "inputmethod.exe",
+]
+
 RECORDING_DIR = Path(os.path.expandvars(
     r"%APPDATA%\Qianwen\qianwen-ai-record"))
 
@@ -165,6 +185,44 @@ def capture_sessions() -> dict[str, str]:
     return result
 
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        return psutil.Process(pid).is_running()
+    except Exception:
+        return False
+
+
+def render_sessions() -> dict[str, str]:
+    """默认扬声器上「谁在出声」。用来区分"通话"和"只是用麦克风"。"""
+    ensure_com()
+    out: dict[str, str] = {}
+    try:
+        for s in AudioUtilities.GetAllSessions():
+            pid = s.ProcessId
+            if not pid:
+                n = "system"
+            else:
+                try:
+                    n = (psutil.Process(pid).name() or "").lower()
+                except Exception:
+                    n = f"pid{pid}"
+            st = {0: "Inactive", 1: "Active", 2: "Expired"}.get(
+                s.State, "Unknown")
+            if out.get(n) != "Active":
+                out[n] = st
+    except Exception as e:
+        log(f"[warn] 枚举回放会话失败: {type(e).__name__}: {e}")
+    return out
+
+
+def is_excluded_process(proc: str, cfg: dict) -> bool:
+    """输入法之类的进程不算通话（它们也用麦克风做语音输入）。"""
+    ex = cfg.get("exclude_processes")
+    if ex is None:
+        ex = DEFAULT_EXCLUDE_PROCESSES
+    return proc.lower() in {str(p).lower() for p in ex}
+
+
 def processes_running() -> dict[str, int]:
     out: dict[str, int] = {}
     for p in psutil.process_iter(["pid", "name"]):
@@ -178,21 +236,43 @@ def processes_running() -> dict[str, int]:
 
 
 def detect_active_calls(cfg: dict, sessions: dict[str, str],
-                        running: dict[str, int] | None = None) -> list[str]:
+                        render: dict[str, str] | None = None,
+                        render_since: dict[str, float] | None = None,
+                        now: float | None = None) -> list[str]:
     """返回正在通话的应用 key 列表。
 
-    ★ 只看音频会话就够了：会话是 Active 说明该进程必然活着、且正占用麦克风。
-    早先还要求「进程在 running 里」，那是冗余的 —— 而枚举全部进程要 4.9ms，
-    占了每轮开销的一半。running 参数保留只为兼容旧调用。
+    判定 = 该应用**正在占用麦克风**，并且（默认要求）**近期还有回放活动**。
+
+    为什么要求回放：真通话是双向的 —— 你说话（采集）+ 听对方说（回放）。
+    而**语音输入法、录一条语音消息，都只有采集、没有回放**。
+    只按"占麦克风"判定，就会把"用微信输入法语音打字"误判成"微信通话"。
+
+    回放要求**连续**活跃 min_playback_sec 秒（默认 3）：
+    真通话的播放流一直开着（WASAPI 会话即使当下静音也保持 Active），
+    而通知音/提示音只响一两秒 —— 用"持续时长"区分这两者。
     """
+    render = render or {}
+    render_since = render_since if render_since is not None else {}
+    now = now if now is not None else time.time()
+    require_pb = cfg.get("require_playback", True)
+    min_pb = float(cfg.get("min_playback_sec", 3))
+
     active = []
     for key, spec in cfg["apps"].items():
         if not spec.get("enabled"):
             continue
         for proc in spec["processes"]:
-            if sessions.get(proc.lower()) == "Active":
-                active.append(key)
-                break
+            p = proc.lower()
+            if is_excluded_process(p, cfg):
+                continue                     # 输入法一律不算
+            if sessions.get(p) != "Active":
+                continue                     # 没在用麦克风
+            if require_pb:
+                since = render_since.get(p)
+                if since is None or (now - since) < min_pb:
+                    continue                 # 没有持续回放 -> 不是通话
+            active.append(key)
+            break
     return active
 
 
@@ -597,6 +677,7 @@ class Watcher:
         self._pending: dict[str, float] = {}
         self._fired: set[str] = set()      # 本次通话已处理过（防重复触发）
         self._tick_n = 0                   # 轮询计数（用于给进程枚举降频）
+        self._render_since: dict[str, float] = {}  # 各进程"回放连续活跃"的起点
         self.archiver = RecordingArchiver(self.cfg)
 
     # ---------------- 控制 ----------------
@@ -754,8 +835,18 @@ class Watcher:
             self._stop.wait(interval)
 
     def _tick(self, prev_active: set[str]) -> None:
+        now_t = time.time()
         sessions = capture_sessions()
-        active = set(detect_active_calls(self.cfg, sessions))
+        # 回放活动：谁在出声。用于把"通话"和"只用麦克风（语音输入）"分开
+        need_pb = self.cfg.get("require_playback", True)
+        render = render_sessions() if need_pb else {}
+        for _p, _st in render.items():
+            if _st == "Active":
+                self._render_since.setdefault(_p, now_t)   # 记住连续起点
+            else:
+                self._render_since.pop(_p, None)           # 断了就清零
+        active = set(detect_active_calls(self.cfg, sessions, render,
+                                         self._render_since, now_t))
         rec = recorder_is_recording(self.cfg, sessions)
 
         # 进程列表只用于面板展示，没必要每轮都全量枚举（省一半 CPU）。
